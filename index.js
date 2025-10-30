@@ -1,133 +1,126 @@
-// index.js — Tuned Cloudflare Worker for finding valid Roblox JobIds
-// Optimized for games with many servers
+// index.js — Cloudflare Worker for finding valid Roblox JobIds safely
+// Handles Roblox rate limits gracefully with adaptive backoff
 
 const PLACE_ID = 606849621; // Replace with your game's Place ID
-const COOLDOWN_TTL = 450; // 2 minutes (KV TTL in seconds)
-const MAX_PAGES = 50; // safety limit
-const MAX_ATTEMPTS = 20; // retry attempts if none found
-const RETRY_DELAY_MS = 100; // wait 3s between retries
+const COOLDOWN_TTL = 450;   // 2 minutes (KV TTL in seconds)
+const MAX_PAGES = 40;       // Max number of pages per run
+const BASE_DELAY = 1000;    // 1s between page requests
+const RETRY_DELAY = 1000;   // 5s between retry loops
+const MAX_ATTEMPTS = 10;    // Number of full search retries
 
-// Fetch servers from Roblox API with retries and randomized order
-async function getServers(cursor, attempt = 1, maxAttempts = 5) {
+// Utility sleep
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Fetch servers from Roblox API with safe rate limit handling
+async function getServers(cursor, attempt = 1) {
   const sortOrder = Math.random() > 0.5 ? "Asc" : "Desc";
   let url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?sortOrder=${sortOrder}&excludeFullGames=true&limit=100`;
   if (cursor) url += `&cursor=${cursor}`;
 
   try {
     const res = await fetch(url);
+
+    if (res.status === 429) {
+      console.warn("⚠️ Hit Roblox rate limit (HTTP 429). Backing off 10s...");
+      await sleep(10000);
+      return getServers(cursor, attempt + 1);
+    }
+
     if (!res.ok) throw new Error(`Roblox API returned ${res.status}`);
     return await res.json();
+
   } catch (err) {
-    console.warn(`❌ Fetch failed (attempt ${attempt}):`, err.message);
-    if (attempt >= maxAttempts) {
-      console.error("⛔ Max retries reached. Stopping fetch.");
+    console.warn(`❌ Fetch failed (attempt ${attempt}): ${err.message}`);
+    if (attempt >= 5) {
+      console.error("⛔ Max fetch attempts reached — giving up this page.");
       return null;
     }
-    await new Promise((r) => setTimeout(r, 500));
-    return getServers(cursor, attempt + 1, maxAttempts);
+    await sleep(2000 * attempt); // exponential backoff
+    return getServers(cursor, attempt + 1);
   }
 }
 
-// Find a valid JobId
+// Core: find a valid server
 async function findValidServer(kv) {
   let cursor = null;
   let pagesChecked = 0;
 
   while (pagesChecked < MAX_PAGES) {
     pagesChecked++;
+    console.log(`📄 Fetching page ${pagesChecked}...`);
     const data = await getServers(cursor);
-    if (!data || !data.data || data.data.length === 0) {
-      console.warn("⚠️ No data received from Roblox API.");
+    if (!data || !data.data) {
+      console.warn("⚠️ No data returned (possible throttle or empty).");
       break;
     }
 
-    console.log(`📄 Page ${pagesChecked}: ${data.data.length} servers`);
-
     for (const server of data.data) {
       const jobId = server.id;
-      const playing = server.playing || 0;
-      const maxPlayers = server.maxPlayers || 0;
-      const status = (server.status || "unknown").toLowerCase();
+      const playing = server.playing ?? 0;
+      const maxPlayers = server.maxPlayers ?? 0;
+      const status = (server.status ?? "unknown").toLowerCase();
 
-      // Log summary
-      console.log(`🕹️  Server ${jobId}: ${playing}/${maxPlayers}, status=${status}`);
+      console.log(`🕹️ ${jobId}: ${playing}/${maxPlayers}, status=${status}`);
 
-      // Skip reserved or closing servers
-      if (status.includes("reserved") || status.includes("closing")) {
-        console.log(`⏩ Skipping ${jobId} (status=${status})`);
-        continue;
-      }
+      // Skip non-playable servers
+      if (status.includes("reserved") || status.includes("closing")) continue;
+      if (playing <= 0 || playing >= maxPlayers) continue;
 
-      // Skip empty or full servers
-      if (playing <= 0) {
-        console.log(`⏩ Skipping ${jobId} (empty)`);
-        continue;
-      }
-      if (playing >= maxPlayers) {
-        console.log(`⏩ Skipping ${jobId} (full)`);
-        continue;
-      }
-
-      // Skip recently visited servers
+      // Skip recently visited
       const visited = await kv.get(jobId);
-      if (visited) {
-        console.log(`⏩ Skipping ${jobId} (recently visited)`);
-        continue;
-      }
+      if (visited) continue;
 
-      // ✅ Found valid server
-      console.log(`✅ Valid server found: ${jobId} (${playing}/${maxPlayers}, status=${status})`);
+      // ✅ Valid server found
+      console.log(`✅ Valid server: ${jobId}`);
       await kv.put(jobId, Date.now().toString(), { expirationTtl: COOLDOWN_TTL });
       return jobId;
     }
 
-    // No more pages
+    // Go to next page if available
     if (!data.nextPageCursor) {
-      console.warn("⚠️ No next page cursor, reached end of results.");
+      console.log("⚠️ No next page cursor — end of list.");
       break;
     }
 
     cursor = data.nextPageCursor;
-    await new Promise((r) => setTimeout(r, 500));
+    await sleep(BASE_DELAY); // delay to stay under rate limit
   }
 
-  console.warn(`🚫 Checked ${pagesChecked} pages, no valid server found.`);
+  console.warn(`🚫 Checked ${pagesChecked} pages — no valid JobId found.`);
   return null;
 }
 
-// Retry logic — keeps searching until one is found
+// Retry wrapper — will back off between full searches
 async function getJobIdWithRetry(kv) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    console.log(`🔁 Search attempt ${attempt}...`);
     const jobId = await findValidServer(kv);
     if (jobId) return jobId;
 
-    console.log(`🔁 Attempt ${attempt}: No JobId found. Retrying in ${RETRY_DELAY_MS / 1000}s...`);
-    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    console.warn(`⏳ No JobId yet — waiting ${RETRY_DELAY / 1000}s before retry...`);
+    await sleep(RETRY_DELAY);
   }
-
-  console.error("❌ Max attempts reached, still no valid JobId found.");
+  console.error("❌ Out of attempts — no valid JobId found.");
   return null;
 }
 
-// Cloudflare Worker entrypoint
+// Cloudflare Worker handler
 export default {
   async fetch(request, env) {
     const kv = env.VISITED_KV;
     if (!kv) {
-      return new Response("❌ Error: VISITED_KV not configured.", { status: 500 });
+      return new Response("❌ VISITED_KV not configured.", { status: 500 });
     }
 
-    console.log("🚀 Searching for a valid JobId...");
+    console.log("🚀 Starting Roblox JobId search...");
     const jobId = await getJobIdWithRetry(kv);
 
     if (jobId) {
-      console.log(`🎯 Returning JobId: ${jobId}`);
       return new Response(jobId, { headers: { "Content-Type": "text/plain" } });
     } else {
-      console.log("😞 No valid JobId found after retries.");
       return new Response("No valid JobId found right now.", {
-        headers: { "Content-Type": "text/plain" },
         status: 503,
+        headers: { "Content-Type": "text/plain" },
       });
     }
   },
