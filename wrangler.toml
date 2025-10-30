@@ -6,3 +6,10 @@ account_id = "8fcf6d30ab4665b4ef1e35bc2e26e1b2"  # Replace this with your Cloudf
 [[kv_namespaces]]
 binding = "VISITED_KV"
 id = "bec04708fdd54f6d8c465a5a6104c037"
+
+[observability]
+[observability.logs]
+enabled = false
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
