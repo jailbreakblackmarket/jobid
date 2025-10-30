@@ -13,8 +13,8 @@ async function getServers(cursor) {
     if (!res.ok) throw new Error("Failed to fetch servers");
     return await res.json();
   } catch (err) {
-    console.warn("Failed to fetch servers, retrying in 5 seconds...", err.message);
-    await new Promise(r => setTimeout(r, 5000));
+    console.warn("Failed to fetch servers, retrying...", err.message);
+    await new Promise(r => setTimeout(r, 100));
     return getServers(cursor);
   }
 }
@@ -43,7 +43,7 @@ async function findValidServer(kv) {
 
     if (!data.nextPageCursor) break;
     cursor = data.nextPageCursor;
-    await new Promise(r => setTimeout(r, 500)); // small delay
+    await new Promise(r => setTimeout(r, 100)); // small delay
   }
 
   return null;
