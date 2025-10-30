@@ -1,12 +1,10 @@
-// index.js — Cloudflare Worker for finding valid Roblox JobIds with retries
+// index.js — Cloudflare Worker for finding valid Roblox JobIds
 
 const PLACE_ID = 606849621; // Replace with your game's place ID
 const COOLDOWN_TTL = 450; // 7.5 minutes (KV TTL is in seconds)
-const RETRY_DELAY = 50; // 3 seconds between retries
-const MAX_ATTEMPTS = 500; // safety limit to avoid infinite loop
 
 // Fetch servers from Roblox API
-async function getServers(cursor) {
+async function getServers(cursor, attempt = 1, maxAttempts = 5) {
   let url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?sortOrder=Asc&excludeFullGames=true&limit=100`;
   if (cursor) url += `&cursor=${cursor}`;
 
@@ -15,17 +13,24 @@ async function getServers(cursor) {
     if (!res.ok) throw new Error(`Roblox API returned ${res.status}`);
     return await res.json();
   } catch (err) {
-    console.warn("Failed to fetch servers:", err.message);
-    await new Promise((r) => setTimeout(r, 50));
-    return getServers(cursor); // retry once on failure
+    console.warn(`Fetch failed (attempt ${attempt}):`, err.message);
+    if (attempt >= maxAttempts) {
+      console.error("Max retries reached. Stopping fetch.");
+      return null; // give up
+    }
+    await new Promise((r) => setTimeout(r, 100)); // wait 0.5s before retry
+    return getServers(cursor, attempt + 1, maxAttempts);
   }
 }
 
 // Find a valid server
 async function findValidServer(kv) {
   let cursor = null;
+  let pagesChecked = 0;
+  const MAX_PAGES = 50; // safety limit
 
-  while (true) {
+  while (pagesChecked < MAX_PAGES) {
+    pagesChecked++;
     const data = await getServers(cursor);
     if (!data || !data.data) break;
 
@@ -35,38 +40,22 @@ async function findValidServer(kv) {
       const maxPlayers = server.maxPlayers || 0;
       const status = (server.status || "unknown").toLowerCase();
 
-      // Only accept active/running servers
       if (status !== "running" && status !== "active") continue;
-
-      // Must have at least 1 player and 4 empty slots
       if (playing <= 0 || playing > maxPlayers - 4) continue;
 
-      // Skip recently visited servers
       const visited = await kv.get(jobId);
       if (visited) continue;
 
-      // ✅ Found a valid server
       await kv.put(jobId, Date.now().toString(), { expirationTtl: COOLDOWN_TTL });
       return jobId;
     }
 
     if (!data.nextPageCursor) break;
     cursor = data.nextPageCursor;
-    await new Promise((r) => setTimeout(r, 50)); // small delay between requests
+    await new Promise((r) => setTimeout(r, 500));
   }
 
-  return null;
-}
-
-// Retry loop for robustness
-async function getJobIdWithRetry(kv) {
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const jobId = await findValidServer(kv);
-    if (jobId) return jobId;
-
-    console.warn(`Attempt ${attempt}: No valid JobId found. Retrying in ${RETRY_DELAY / 1000}s...`);
-    await new Promise((r) => setTimeout(r, RETRY_DELAY));
-  }
+  console.warn("Stopped after max pages checked:", pagesChecked);
   return null;
 }
 
@@ -78,17 +67,15 @@ export default {
       return new Response("Error: VISITED_KV not configured.", { status: 500 });
     }
 
-    // Keep retrying until a valid JobId is found or max attempts reached
-    const jobId = await getJobIdWithRetry(kv);
+    const jobId = await findValidServer(kv);
 
     if (jobId) {
       return new Response(jobId, {
         headers: { "Content-Type": "text/plain" },
       });
     } else {
-      return new Response("No valid JobId found after multiple attempts.", {
+      return new Response("No valid JobId found right now.", {
         headers: { "Content-Type": "text/plain" },
-        status: 503,
       });
     }
   },
