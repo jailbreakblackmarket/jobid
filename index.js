@@ -3,7 +3,7 @@
 const PLACE_ID = 606849621; // Replace with your game's place ID
 const COOLDOWN_TTL = 450; // 7.5 minutes (KV TTL is in seconds)
 const RETRY_DELAY = 50; // 3 seconds between retries
-const MAX_ATTEMPTS = 1000; // safety limit to avoid infinite loop
+const MAX_ATTEMPTS = 500; // safety limit to avoid infinite loop
 
 // Fetch servers from Roblox API
 async function getServers(cursor) {
