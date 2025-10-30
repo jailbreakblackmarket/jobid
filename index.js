@@ -13,8 +13,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Fetch servers from Roblox API with safe rate limit handling
 async function getServers(cursor, attempt = 1) {
-  const sortOrder = Math.random() > 0.5 ? "Asc" : "Desc";
-  let url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?sortOrder=${sortOrder}&excludeFullGames=true&limit=100`;
+  let url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?sortOrder=Asc&excludeFullGames=true&limit=100`;
   if (cursor) url += `&cursor=${cursor}`;
 
   try {
