@@ -4,11 +4,6 @@ compatibility_date = "2025-10-29"
 account_id = "8fcf6d30ab4665b4ef1e35bc2e26e1b2"  # Replace this with your Cloudflare Account ID
 workers_dev = true               # true means it will deploy to <name>.workers.dev
 
-{
-  "kv_namespaces": [
-    {
-      "binding": "VISITED_KV",
-      "id": "bec04708fdd54f6d8c465a5a6104c037"
-    }
-  ]
-}
+[[kv_namespaces]]
+"binding": "VISITED_KV",
+"id": "bec04708fdd54f6d8c465a5a6104c037"
