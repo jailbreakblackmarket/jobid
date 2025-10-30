@@ -9,7 +9,7 @@ id = "bec04708fdd54f6d8c465a5a6104c037"
 
 [observability]
 [observability.logs]
-enabled = false
+enabled = true
 head_sampling_rate = 1
 invocation_logs = true
 persist = true
