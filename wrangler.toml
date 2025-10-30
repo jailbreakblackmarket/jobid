@@ -1,4 +1,4 @@
-name = "jobid-worker"
+name = "testing"
 main = "index.js"
 compatibility_date = "2025-10-29"
 account_id = "8fcf6d30ab4665b4ef1e35bc2e26e1b2"  # Replace this with your Cloudflare Account ID
