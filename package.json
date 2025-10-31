@@ -1,13 +1,12 @@
 {
-  "name": "jobid-worker",
+  "name": "server-selector",
   "version": "1.0.0",
-  "description": "Cloudflare Worker that returns a valid Roblox JobId using KV for cooldowns.",
+  "description": "Cloudflare Worker that selects and returns recent servers",
   "main": "index.js",
-  "type": "module",
   "scripts": {
-    "start": "wrangler dev",
-    "deploy": "wrangler publish"
+    "deploy": "wrangler deploy"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "wrangler": "^3.74.0"
+  }
 }
