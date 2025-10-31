@@ -1,15 +1,7 @@
-name = "jobid-grabber"
-main = "index.js"
+name = "server-selector"
+main = "src/index.js"
 compatibility_date = "2025-10-30"
-account_id = "8fcf6d30ab4665b4ef1e35bc2e26e1b2"  # Replace this with your Cloudflare Account ID
 
 [[kv_namespaces]]
-binding = "VISITED_KV"
-id = "bec04708fdd54f6d8c465a5a6104c037"
-
-[observability]
-[observability.logs]
-enabled = true
-head_sampling_rate = 1
-invocation_logs = true
-persist = true
+binding = "SERVERS"
+id = "0fe81a9ee13f4bad87d2ad4706409a5a"
