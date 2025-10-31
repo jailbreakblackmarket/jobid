@@ -5,3 +5,10 @@ compatibility_date = "2025-10-30"
 [[kv_namespaces]]
 binding = "SERVERS"
 id = "0fe81a9ee13f4bad87d2ad4706409a5a"
+
+[observability]
+[observability.logs]
+enabled = false
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
