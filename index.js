@@ -1,30 +1,46 @@
 export default {
   async fetch(request, env) {
     const kv = env.SERVERS;
+    console.log("🔹 Request received:", request.method);
 
     if (request.method === "POST") {
-      const list = await request.json();
-      const existing = await kv.list();
-      const used = new Set(existing.keys.map(k => k.name));
+      try {
+        const list = await request.json();
+        console.log("📦 Received server list:", list.length, "entries");
 
-      for (const s of list) {
-        if (s.playing >= 1 && s.playing <= 27 && !used.has(s.id)) {
-          await kv.put(
-            s.id,
-            JSON.stringify({ id: s.id, playing: s.playing, t: Date.now() }),
-            { expirationTtl: 450 }
-          );
+        const existing = await kv.list();
+        console.log("🗝️ Existing keys in KV:", existing.keys.length);
 
-          // ✅ return only the server ID as plain text
-          return new Response(s.id, {
-            headers: { "content-type": "text/plain" },
-          });
+        const used = new Set(existing.keys.map(k => k.name));
+
+        for (const s of list) {
+          console.log("➡️ Checking server:", s.id, "players:", s.playing);
+
+          if (s.playing >= 1 && s.playing <= 27 && !used.has(s.id)) {
+            console.log("✅ Selected server:", s.id);
+
+            await kv.put(
+              s.id,
+              JSON.stringify({ id: s.id, playing: s.playing, t: Date.now() }),
+              { expirationTtl: 450 }
+            );
+
+            console.log("💾 Stored server", s.id, "in KV (TTL 450s)");
+            return new Response(s.id, {
+              headers: { "content-type": "text/plain" },
+            });
+          }
         }
-      }
 
-      return new Response("none", { status: 404 });
+        console.log("❌ No valid servers found in list.");
+        return new Response("none", { status: 404 });
+      } catch (err) {
+        console.error("🚨 Error handling POST:", err);
+        return new Response("error", { status: 500 });
+      }
     }
 
+    console.warn("⚠️ Unsupported method:", request.method);
     return new Response("Only POST supported", { status: 405 });
   },
 };
