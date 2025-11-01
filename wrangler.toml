@@ -3,7 +3,7 @@ main = "index.js"
 compatibility_date = "2025-10-30"
 
 [[kv_namespaces]]
-binding = "SERVERS"
+  binding = "VISITED"
 id = "0fe81a9ee13f4bad87d2ad4706409a5a"
 
 [observability]
