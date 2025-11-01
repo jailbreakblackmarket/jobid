@@ -3,7 +3,6 @@ const TTL = 450; // 7.5 minutes
 export default {
   async fetch(req, env) {
     const t = Date.now();
-    console.log("📥", req.method, req.url);
     if (req.method !== "POST") return new Response("Only POST", { status: 405 });
 
     const kv = env.VISITED_KV;
