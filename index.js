@@ -26,7 +26,6 @@ export default {
       if (await kv.get(s.id)) { console.log("⏩ Skip", s.id); continue; }
       console.log("✅ Picked", s.id);
       await kv.put(s.id, "used", { expirationTtl: TTL });
-      console.log(`🕒 Saved ${s.id} for ${TTL}s (${Date.now() - t}ms)`);
       return new Response(s.id, { status: 200 });
     }
 
