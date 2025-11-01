@@ -1,75 +1,48 @@
-// index.js — Cloudflare Worker for Roblox server selection with full logging
+// Cloudflare Worker: Select first unvisited server and return JobId
 
-const COOLDOWN_TTL = 450; // 7.5 minutes (in seconds)
-const MAX_RETRIES = 3; // retry attempts if all servers visited
+const COOLDOWN_TTL = 450; // 7.5 minutes
 
 export default {
-  async fetch(request, env, ctx) {
-    const start = Date.now();
-
-    // Only allow POST
+  async fetch(request, env) {
     if (request.method !== "POST") {
-      console.log("❌ Invalid method:", request.method);
-      return new Response("Use POST to send the server list.", { status: 405 });
+      return new Response("Method Not Allowed", { status: 405 });
     }
 
+    let servers;
     try {
-      // Parse incoming JSON body
-      const servers = await request.json();
-      console.log(`📦 Received request with ${servers.length || 0} servers`);
-
+      servers = await request.json();
       if (!Array.isArray(servers) || servers.length === 0) {
-        console.warn("⚠️ No servers provided or invalid JSON");
-        return new Response("Invalid or empty server list.", { status: 400 });
+        return new Response("Invalid server list", { status: 400 });
       }
-
-      // Loop with retries
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        console.log(`🔁 Attempt ${attempt} to find unvisited server...`);
-
-        for (const server of servers) {
-          const jobId = server.id;
-          if (!jobId) {
-            console.warn("⚠️ Skipping malformed server (missing id)");
-            continue;
-          }
-
-          const visited = await env.VISITED.get(jobId);
-          if (visited) {
-            console.log(`⏩ Skipping visited server: ${jobId}`);
-            continue;
-          }
-
-          // ✅ Found a new one
-          await env.VISITED.put(jobId, Date.now().toString(), {
-            expirationTtl: COOLDOWN_TTL,
-          });
-
-          const duration = (Date.now() - start) / 1000;
-          console.log(`✅ Selected JobId: ${jobId} | playing=${server.playing || 0} | took ${duration.toFixed(2)}s`);
-
-          // Return successful response
-          return new Response(
-            JSON.stringify({
-              id: jobId,
-              playing: server.playing || 0,
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        console.warn(`⚠️ All servers visited (attempt ${attempt}/${MAX_RETRIES}), retrying in 2s...`);
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-
-      console.error("🚫 No unvisited servers after all retries.");
-      return new Response("No valid unvisited servers available.", { status: 404 });
-    } catch (err) {
-      console.error("❌ Error during request:", err);
-      return new Response("Internal server error", { status: 500 });
+    } catch {
+      return new Response("Bad Request: Invalid JSON", { status: 400 });
     }
+
+    // Make sure KV binding exists
+    const kv = env.VISITED_KV;
+    if (!kv) {
+      return new Response("VISITED_KV not bound", { status: 500 });
+    }
+
+    // Loop through provided servers
+    for (const server of servers) {
+      if (!server.id) continue;
+
+      const visited = await kv.get(server.id);
+      if (visited) continue; // skip recently used
+
+      // ✅ Found unvisited server
+      await kv.put(server.id, Date.now().toString(), { expirationTtl: COOLDOWN_TTL });
+      return new Response(server.id, {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    // ❌ No suitable servers
+    return new Response("NO_SERVER", {
+      status: 404,
+      headers: { "Content-Type": "text/plain" },
+    });
   },
 };
