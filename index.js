@@ -21,10 +21,10 @@ export default {
         const jobId = server.id;
         if (!jobId) continue; // skip malformed data
 
-        const visited = await env.VISITED_KV.get(jobId);
+        const visited = await env.VISITED.get(jobId);
         if (!visited) {
           // Mark as visited for 7.5 minutes
-          await env.VISITED_KV.put(jobId, Date.now().toString(), { expirationTtl: COOLDOWN_TTL });
+          await env.VISITED.put(jobId, Date.now().toString(), { expirationTtl: COOLDOWN_TTL });
 
           console.log(`✅ Selected JobId: ${jobId}`);
 
