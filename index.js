@@ -53,7 +53,6 @@ export default {
             JSON.stringify({
               id: jobId,
               playing: server.playing || 0,
-              timestamp: new Date().toISOString(),
             }),
             {
               status: 200,
