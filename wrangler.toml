@@ -10,5 +10,10 @@ id = "0fe81a9ee13f4bad87d2ad4706409a5a"
 [observability.logs]
 enabled = true
 head_sampling_rate = 1
+persist = true
 invocation_logs = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
 persist = true
