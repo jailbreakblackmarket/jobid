@@ -34,14 +34,14 @@ export default {
             continue;
           }
 
-          const visited = await env.VISITED_KV.get(jobId);
+          const visited = await env.VISITED.get(jobId);
           if (visited) {
             console.log(`⏩ Skipping visited server: ${jobId}`);
             continue;
           }
 
           // ✅ Found a new one
-          await env.VISITED_KV.put(jobId, Date.now().toString(), {
+          await env.VISITED.put(jobId, Date.now().toString(), {
             expirationTtl: COOLDOWN_TTL,
           });
 
